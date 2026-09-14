@@ -12,6 +12,7 @@ const mockGit = {
   commit: vi.fn(),
   push: vi.fn(),
   revparse: vi.fn().mockResolvedValue('main'),
+  raw: vi.fn(),
 };
 
 vi.mock('simple-git', () => ({
@@ -716,6 +717,27 @@ describe('init', () => {
         'project',
         process.cwd(),
       );
+    });
+  });
+
+  describe('single-repo mode', () => {
+    it('redacts credentials from an invalid business remote', async () => {
+      pathExistsFn = (p: string) => p.endsWith(`${path.sep}.git`) || p.endsWith('/.git');
+      mockGit.raw.mockResolvedValue(
+        'http://user:token-must-not-appear@git.example.com/group/repo.git\n',
+      );
+
+      const { log } = await import('../utils/logger.js');
+
+      await init({ repo: '.' });
+
+      const errorCalls = vi.mocked(log.error).mock.calls.map(([message]) => String(message));
+      expect(errorCalls).toContain(
+        'Could not parse the business repo remote "http://git.example.com/group/repo.git": '
+        + 'Invalid Git repo URL: plain HTTP is not supported; use HTTPS or SSH '
+        + '(expected https://host/group/repo.git, ssh://git@host/group/repo.git, or git@host:group/repo.git)',
+      );
+      expect(errorCalls.join('\n')).not.toContain('token-must-not-appear');
     });
   });
 });

@@ -750,7 +750,7 @@ export async function initSelfRepo(options: GlobalOptions & {
   try {
     repoInfo = provider.parseRepoInput(remoteUrl);
   } catch (e) {
-    log.error(`Could not parse the business repo remote "${remoteUrl}": ${(e as Error).message}`);
+    log.error(`Could not parse the business repo remote "${redactGitCredentials(remoteUrl)}": ${(e as Error).message}`);
     process.exit(1);
     return;
   }
