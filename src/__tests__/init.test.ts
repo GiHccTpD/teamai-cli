@@ -721,23 +721,39 @@ describe('init', () => {
   });
 
   describe('single-repo mode', () => {
-    it('redacts credentials from an invalid business remote', async () => {
+    it('accepts an existing HTTP origin without persisting its credentials', async () => {
       pathExistsFn = (p: string) => p.endsWith(`${path.sep}.git`) || p.endsWith('/.git');
       mockGit.raw.mockResolvedValue(
         'http://user:token-must-not-appear@git.example.com/group/repo.git\n',
       );
 
       const { log } = await import('../utils/logger.js');
+      const { loadTeamConfig, saveLocalConfigForScope } = await import('../config.js');
+      vi.mocked(loadTeamConfig).mockResolvedValue({
+        team: 'repo',
+        description: '',
+        repo: 'http://git.example.com/group/repo.git',
+        provider: 'git',
+        reviewers: [],
+        sharing: { rules: { enforced: [] }, docs: {}, env: { injectShellProfile: true } },
+        toolPaths: {},
+      } as never);
 
-      await init({ repo: '.' });
+      await init({ repo: '.', dryRun: true });
 
       const errorCalls = vi.mocked(log.error).mock.calls.map(([message]) => String(message));
-      expect(errorCalls).toContain(
-        'Could not parse the business repo remote "http://git.example.com/group/repo.git": '
-        + 'Invalid Git repo URL: plain HTTP is not supported; use HTTPS or SSH '
-        + '(expected https://host/group/repo.git, ssh://git@host/group/repo.git, or git@host:group/repo.git)',
-      );
+      const debugCalls = vi.mocked(log.debug).mock.calls.map(([message]) => String(message));
+      expect(mockExit).not.toHaveBeenCalled();
+      expect(errorCalls).not.toContainEqual(expect.stringContaining('Could not parse the business repo remote'));
       expect(errorCalls.join('\n')).not.toContain('token-must-not-appear');
+      expect(debugCalls.join('\n')).not.toContain('token-must-not-appear');
+      expect(saveLocalConfigForScope).toHaveBeenCalledWith(
+        expect.objectContaining({
+          repo: expect.objectContaining({ remote: 'http://git.example.com/group/repo.git' }),
+        }),
+        'project',
+        process.cwd(),
+      );
     });
   });
 });
